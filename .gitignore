@@ -1,0 +1,53 @@
+# ===== 密码和敏感信息 =====
+.env
+*.pem
+*.key
+
+# ===== Python 虚拟环境（最重要！1-2GB）=====
+.venv/
+venv/
+env/
+.venv
+venv
+env
+
+# ===== IDE 配置 =====
+.idea/
+.vscode/
+*.iml
+*.pyc
+__pycache__/
+
+# ===== 项目大文件夹（根据你的截图）=====
+doc/
+logs/
+output/
+models/
+data/
+temp/
+cache/
+images/
+
+# ===== 大文件类型 =====
+*.pdf
+*.docx
+*.xlsx
+*.zip
+*.tar.gz
+*.mp4
+*.avi
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
+# ===== 依赖锁定文件 =====
+uv.lock
+poetry.lock
+Pipfile.lock
+
+# ===== 其他 =====
+*.log
+.DS_Store
+Thumbs.db

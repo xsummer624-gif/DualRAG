@@ -61,7 +61,7 @@
 ## 项目结构
 
 ```
-RAG_py/
+DualRAG/
 ├── app/
 │   ├── agentic_query/          # Agentic 查询链路（新增）
 │   │   ├── agent/

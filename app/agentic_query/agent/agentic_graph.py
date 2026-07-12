@@ -17,11 +17,9 @@ from app.query_process.agent.nodes.node_item_name_confirm import (
     step_4_vectorize_and_query,
     step_5_align_item_names,
 )
-from app.agentic_query.agent.tools.kb_search import search_knowledge_base
-from app.agentic_query.agent.tools.hyde_search import search_knowledge_base_enhanced
-from app.agentic_query.agent.tools.web_search import search_web
-
-tools = [search_knowledge_base, search_knowledge_base_enhanced, search_web]
+from app.agentic_query.agent.tools.kb_search import make_search_knowledge_base
+from app.agentic_query.agent.tools.hyde_search import make_search_knowledge_base_enhanced
+from app.agentic_query.agent.tools.web_search import make_search_web
 
 BASE_PROMPT = """你是掌柜智库的智能客服助手，专门为用户解答产品使用、技术规格、故障排查等问题。
 你的知识主要来自本地知识库（产品手册、说明书），必要时可联网补充实时信息。
@@ -51,8 +49,9 @@ HyDE 增强检索，会先生成假设答案再用它检索。参数同上。
 - 以下情况使用 search_web：问题涉及实时信息（新型号、价格、新闻）、或知识库工具返回空且问题不在产品手册范畴内。
 
 ### 搜索次数
-- 总共最多调用 3 次工具。
-- 如果第一次检索结果已经能完整回答问题，无需凑满 3 次，直接生成最终回答。
+- 每个工具最多可调用 2 次（系统强制限制，超过会返回"已达上限"提示，无法再执行）。
+- 如果某工具返回"已达调用上限"提示，立即换用其他工具或直接基于已有信息回答，不要再尝试调用该工具。
+- 如果第一次检索结果已经能完整回答问题，无需凑满次数，直接生成最终回答。
 - 如果某个工具返回空，换一个工具重试（不要用相同参数重复调同一个工具）。
 - 禁止用完全相同的参数重复调用任何工具。
 
@@ -60,7 +59,7 @@ HyDE 增强检索，会先生成假设答案再用它检索。参数同上。
 搜索结果"足够"的标准：能直接回答用户问题的核心诉求。
 - 如果结果包含了用户问的具体参数/步骤/方法 → 足够，立即回答。
 - 如果结果只涉及部分，且缺失部分可能是另一个产品或另一个话题 → 足够，回答已知部分，说明未覆盖的部分。
-- 如果结果完全空白或明显不相关 → 不够，换工具或换 query 重试（受 3 次上限约束）。
+- 如果结果完全空白或明显不相关 → 不够，换工具或换 query 重试（受每工具 2 次上限约束）。
 
 ## 回答规范
 
@@ -157,7 +156,6 @@ def extract_agent_chain(messages) -> list:
 
 
 _model = None
-_agent_executor = None
 
 
 def get_model():
@@ -173,15 +171,19 @@ def get_model():
     return _model
 
 
-def get_agent_executor():
-    global _agent_executor
-    if _agent_executor is None:
-        _agent_executor = create_react_agent(
-            model=get_model(),
-            tools=tools,
-            name="agentic_rag_agent",
-        )
-    return _agent_executor
+def build_agent_executor():
+    """每次调用构建一组全新的工具实例（带独立计数器）+ 新的 agent，
+    实现 per-task 的工具调用次数隔离。"""
+    tools = [
+        make_search_knowledge_base(),
+        make_search_knowledge_base_enhanced(),
+        make_search_web(),
+    ]
+    return create_react_agent(
+        model=get_model(),
+        tools=tools,
+        name="agentic_rag_agent",
+    )
 
 
 async def run_agentic_graph(state: dict) -> dict:
@@ -212,8 +214,8 @@ async def run_agentic_graph(state: dict) -> dict:
     messages.append(HumanMessage(content=user_query))
 
     try:
-        agent = get_agent_executor()
-        config = {"recursion_limit": 8, "configurable": {"recursion_limit": 8}}
+        agent = build_agent_executor()
+        config = {"recursion_limit": 16, "configurable": {"recursion_limit": 16}}
 
         agent_messages = []
         answer = ""
